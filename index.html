@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Troca Take AI — Protótipo</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0b12;--panel:#151521;--line:#2b2b3d;--muted:#aaa9bd;--pink:#d946ef;--cyan:#8b5cf6}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0%,#31204a 0,transparent 35%),var(--bg);font:15px/1.5 Inter,system-ui,Arial;color:#f8f7ff}
+main{max-width:980px;margin:auto;padding:34px 20px 60px}.top{display:flex;align-items:center;gap:12px;margin-bottom:28px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--pink),var(--cyan));display:grid;place-items:center;font-size:22px}
+h1{font-size:26px;margin:0}p{color:var(--muted);margin:5px 0}.tag{font-size:11px;color:#f0abfc;border:1px solid #713c80;border-radius:20px;padding:4px 9px;margin-left:auto}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{background:#151521eF;border:1px solid var(--line);border-radius:18px;padding:20px;min-width:0}.wide{grid-column:1/-1}h2{font-size:17px;margin:0 0 5px}.sub{font-size:13px;color:var(--muted);margin-bottom:15px}
+.drop{border:1px dashed #57536d;border-radius:14px;padding:20px;text-align:center;background:#10101a;cursor:pointer}.drop:hover{border-color:#d946ef}.drop input{display:none}.drop strong{display:block;margin:7px 0 2px}.drop small{color:var(--muted)}
+.preview{width:100%;max-height:360px;object-fit:contain;background:#08080d;border-radius:12px;margin-top:12px;display:none}
+label{display:block;font-size:13px;color:#d8d5e7;margin:12px 0 6px}input[type=text],input[type=number],textarea{width:100%;background:#0d0d16;color:white;border:1px solid #39394e;border-radius:10px;padding:11px;font:inherit}textarea{min-height:75px;resize:vertical}
+button{border:0;border-radius:12px;padding:13px 18px;font-weight:700;color:white;background:linear-gradient(100deg,#c026d3,#7c3aed);cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.secondary{background:#29283a;border:1px solid #444158}.notice{font-size:12px;color:#c8c3d8;background:#211d2c;border:1px solid #4c365d;border-radius:12px;padding:12px;margin-top:14px}
+.status{display:none;margin-top:14px;border-radius:12px;padding:12px;background:#17251f;color:#b8f3d1;border:1px solid #28543c}
+@media(max-width:680px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.tag{display:none}main{padding:22px 14px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div class="logo">✦</div><div><h1>Troca Take AI</h1><p>Protótipo de teste · substituição do primeiro take</p></div><span class="tag">VERSÃO DEMO</span></header>
+<section class="grid">
+<div class="card">
+<h2>1. Vídeo original</h2><div class="sub">Envie o vídeo que contém a mulher e o texto que deseja preservar.</div>
+<label class="drop" for="source"><span style="font-size:28px">🎬</span><strong>Selecionar vídeo original</strong><small>MP4, MOV ou WebM</small><input id="source" type="file" accept="video/*"></label>
+<video id="sourcePreview" class="preview" controls playsinline></video>
+</div>
+<div class="card">
+<h2>2. Nova mulher</h2><div class="sub">Use uma foto ou um vídeo como referência da pessoa que entrará no primeiro take.</div>
+<label class="drop" for="person"><span style="font-size:28px">🖼️</span><strong>Selecionar foto ou vídeo</strong><small>JPG, PNG, WEBP, MP4 ou MOV</small><input id="person" type="file" accept="image/*,video/*"></label>
+<img id="imagePreview" class="preview" alt="Prévia da foto enviada">
+<video id="personPreview" class="preview" controls playsinline></video>
+</div>
+<div class="card wide">
+<h2>3. Texto e duração do primeiro take</h2><div class="sub">Na versão final, o sistema tentará reconhecer o texto automaticamente. Aqui você pode conferir ou corrigir o texto extraído.</div>
+<label for="caption">Texto do primeiro take</label><textarea id="caption" placeholder="O texto reconhecido no vídeo aparecerá aqui (você também pode digitar ou corrigir)..."></textarea>
+<label for="duration">Duração do primeiro take (segundos)</label><input id="duration" type="number" min="0.5" max="30" step="0.5" value="3.5">
+<div class="notice">Este protótipo testa o envio dos arquivos, as prévias e a configuração do texto/corte. A troca real da pessoa com IA e o OCR automático ainda precisam ser conectados a um serviço de processamento; este botão não altera o vídeo.</div>
+<div class="actions"><button id="process">Verificar arquivos e configurações</button><button class="secondary" id="reset">Limpar</button></div>
+<div id="status" class="status" role="status"></div>
+</div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function showFile(input, img, vid){
+  const f=input.files[0]; if(!f)return;
+  const url=URL.createObjectURL(f);
+  if(f.type.startsWith('image/')){img.src=url;img.style.display='block';vid.style.display='none';}
+  else if(f.type.startsWith('video/')){vid.src=url;vid.style.display='block';img.style.display='none';}
+}
+$('source').addEventListener('change',()=>{const f=$('source').files[0];if(f){$('sourcePreview').src=URL.createObjectURL(f);$('sourcePreview').style.display='block';}});
+$('person').addEventListener('change',()=>showFile($('person'),$('imagePreview'),$('personPreview')));
+$('process').onclick=()=>{
+ const a=$('source').files[0],b=$('person').files[0],d=Number($('duration').value);
+ if(!a||!b){alert('Envie o vídeo original e a foto ou vídeo da nova mulher.');return;}
+ if(!d||d<=0){alert('Informe uma duração válida para o primeiro take.');return;}
+ $('status').style.display='block';
+ $('status').textContent='Arquivos carregados! Vídeo: '+a.name+' · Referência: '+b.name+' · Primeiro take: '+d+' s. Protótipo validado — a edição com IA ainda não foi executada.';
+};
+$('reset').onclick=()=>{['source','person'].forEach(id=>$(id).value='');['sourcePreview','imagePreview','personPreview'].forEach(id=>{const e=$(id);e.removeAttribute('src');e.style.display='none';});$('caption').value='';$('duration').value='3.5';$('status').style.display='none';};
+</script></body></html>
