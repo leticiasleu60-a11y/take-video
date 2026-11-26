@@ -37,18 +37,20 @@ export default function Home() {
     if (!source || !reference) { setStatus("Escolha o vídeo original e a foto ou vídeo de referência."); return; }
     const d = Number(duration);
     if (!Number.isFinite(d) || d < 3 || d > 10) { setStatus("A duração do trecho precisa ser entre 3 e 10 segundos para este modelo."); return; }
-    if (!process.env.NEXT_PUBLIC_UNUSED) {}
     setBusy(true); setResultUrl("");
+    let stage = "preparação";
     try {
       fal.config({ proxyUrl: "/api/fal/proxy" });
+      stage = "preparar editor de vídeo";
       const ff = await getFFmpeg();
       const ext = source.name.toLowerCase().endsWith(".mov") ? "mov" : "mp4";
       const sourceName = "source." + ext;
+      stage = "ler vídeo original";
       await ff.writeFile(sourceName, await fetchFile(source));
       setStatus("Separando somente os primeiros " + d + " segundos...");
-      await ff.exec(["-i", sourceName, "-t", String(d), "-vf", "fps=24,scale=720:-2", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24", "-an", "first.mp4"]);
+      await ff.exec(["-i", sourceName, "-t", String(d), "-vf", "fps=24,scale='if(gte(iw,ih),-2,720)':'if(gte(iw,ih),720,-2)'", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24", "-an", "first.mp4"]);
       const firstBytes = await ff.readFile("first.mp4");
-      const firstFile = new File([firstBytes], "primeiro-take.mp4", {type:"video/mp4"});
+      const firstFile = new File([firstBytes], "primeiro-take.mp4", {type:"video/mp4"});\n      if (firstFile.size > 200 * 1024 * 1024) throw new Error("O trecho inicial ficou maior que 200 MB. Reduza a qualidade ou a duração.");\n      stage = "preparar imagem de referência";
       let referenceImage = reference;
       if (reference.type.startsWith("video/")) {
         const rext = reference.name.toLowerCase().endsWith(".mov") ? "mov" : "mp4";
@@ -57,9 +59,9 @@ export default function Home() {
         referenceImage = new File([await ff.readFile("reference.jpg")], "referencia.jpg", {type:"image/jpeg"});
       }
       if (!referenceImage.type.startsWith("image/")) throw new Error("A referência precisa ser uma foto ou vídeo válido.");
-      setStatus("Enviando o trecho e a referência com segurança para a IA...");
+      stage = "enviar arquivos para a IA";\n      setStatus("Enviando o trecho e a referência com segurança para a IA...");
       const [videoUrl, imageUrl] = await Promise.all([fal.storage.upload(firstFile), fal.storage.upload(referenceImage)]);
-      setStatus("A IA está substituindo a pessoa no primeiro take. Isso pode levar alguns minutos...");
+      stage = "geração pela IA";\n      setStatus("A IA está substituindo a pessoa no primeiro take. Isso pode levar alguns minutos...");
       const generated = await fal.subscribe(MODEL, { input: {
         video_url: videoUrl,
         elements: [{ frontal_image_url: imageUrl }],
@@ -69,18 +71,18 @@ export default function Home() {
       }, logs: true, onQueueUpdate: (u) => { if (u.status === "IN_PROGRESS") setStatus("A IA está processando o primeiro take..."); } });
       const videoOut = generated?.data?.video?.url;
       if (!videoOut) throw new Error("A IA terminou, mas não retornou o vídeo editado.");
-      setStatus("Baixando o take editado e juntando ao restante original...");
+      stage = "baixar o vídeo gerado";\n      setStatus("Baixando o take editado e juntando ao restante original...");
       const aiResponse = await fetch(videoOut);
       if (!aiResponse.ok) throw new Error("Não foi possível baixar o trecho editado.");
       await ff.writeFile("ai.mp4", new Uint8Array(await aiResponse.arrayBuffer()));
-      // Keep the complete original audio while replacing only the video frames in the selected opening segment.
+      stage = "juntar o take editado ao vídeo original";\n      // Keep the complete original audio while replacing only the video frames in the selected opening segment.
       await ff.exec(["-i", "ai.mp4", "-ss", String(d), "-i", sourceName, "-filter_complex", "[0:v]scale=720:-2,fps=24,setsar=1[v0];[1:v]scale=720:-2,fps=24,setsar=1[v1];[v0][v1]concat=n=2:v=1:a=0[v]", "-map", "[v]", "-map", "1:a?", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-c:a", "aac", "-b:a", "192k", "-shortest", "resultado-final.mp4"]);
       const finalBytes = await ff.readFile("resultado-final.mp4");
       const url = URL.createObjectURL(new Blob([finalBytes], {type:"video/mp4"}));
       setResultUrl(url); setStatus("Vídeo final gerado. Confira o resultado antes de usar.");
     } catch (err) {
       console.error(err);
-      setStatus("Não foi possível concluir: " + (err?.message || "erro inesperado") + ". Confira se o vídeo tem entre 3 e 10 segundos no trecho inicial, resolução mínima de 720p e até 200 MB.");
+      const detail = err?.body?.detail || err?.body?.message || err?.message || "erro sem detalhes retornados";\n      setStatus("Falha ao " + stage + ": " + String(detail).slice(0, 350) + ". Confira também se o vídeo é MP4/MOV e se o trecho inicial tem 3 a 10 segundos.");
     } finally { setBusy(false); }
   }
   if (!logged) return <main><section className="panel"><h1>Troca Take AI</h1><p>Entre com a senha privada do projeto.</p><form onSubmit={login}><label className="field">Senha</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/><div className="row" style={{marginTop:14}}><button>Entrar</button></div></form>{status && <div className="status">{status}</div>}</section></main>;
